@@ -35,8 +35,10 @@ def parse_dependencies(content, package_name, version):
         project = ElementTree.fromstring(content)
     except ElementTree.ParseError as error:
         raise ValueError(f"Некорректный XML в POM: {error}") from error
+
     for element in project.iter():
         element.tag = element.tag.split("}")[-1]
+
     if project.tag != "project":
         raise ValueError("В POM отсутствует корневой элемент project")
 
@@ -44,7 +46,12 @@ def parse_dependencies(content, package_name, version):
     properties = {}
     for element in project.findall("./properties/*"):
         properties[element.tag] = (element.text or "").strip()
-    for name, value in (("groupId", group), ("artifactId", artifact), ("version", version)):
+
+    for name, value in (
+        ("groupId", group),
+        ("artifactId", artifact),
+        ("version", version),
+    ):
         properties["project." + name] = value
         properties["pom." + name] = value
 
@@ -54,8 +61,11 @@ def parse_dependencies(content, package_name, version):
         for name in ("groupId", "artifactId", "version"):
             value = dependency.findtext(name, default="").strip()
             values.append(resolve_properties(value, properties))
+
         if not values[0] or not values[1]:
-            raise ValueError("У зависимости в POM отсутствует groupId или artifactId")
+            raise ValueError(
+                "У зависимости в POM отсутствует groupId " "или artifactId"
+            )
         dependencies.append(tuple(values))
     return dependencies
 

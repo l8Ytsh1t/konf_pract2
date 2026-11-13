@@ -1,6 +1,5 @@
 package_name: A
-repository: repository.yaml
-test_mode: true
+repository: https://maven-central.storage-download.googleapis.com/maven2/test_mode: true
 version: "1.0"
 max_depth: 3
 filter_substring: ""

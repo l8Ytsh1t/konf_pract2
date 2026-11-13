@@ -1,0 +1,6 @@
+package_name: org.junit.jupiter:junit-jupiter-api
+repository: https://repo.maven.apache.org/maven2/
+test_mode: false
+version: 5.10.2
+max_depth: 3
+filter_substring: ''

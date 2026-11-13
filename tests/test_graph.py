@@ -1,3 +1,5 @@
+# flake8: noqa
+from graph import build_graph, get_load_order, to_d2
 import sys
 import tempfile
 import unittest
@@ -9,8 +11,6 @@ import yaml
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_DIR / "src"))
-
-from graph import build_graph, get_load_order
 
 
 class GraphTests(unittest.TestCase):
@@ -29,7 +29,12 @@ class GraphTests(unittest.TestCase):
             ("A", 0, "", {"A": []}),
             ("A", 1, "", {"A": ["B", "C"], "B": [], "C": []}),
             ("A", 2, "", {"A": ["B", "C"], "B": ["D"], "C": ["D"], "D": []}),
-            ("A", 10, "", {"A": ["B", "C"], "B": ["D"], "C": ["D"], "D": ["A", "E"], "E": []}),
+            (
+                "A",
+                10,
+                "",
+                {"A": ["B", "C"], "B": ["D"], "C": ["D"], "D": ["A", "E"], "E": []},
+            ),
             ("A", 3, "B", {"A": ["C"], "C": ["D"], "D": ["A", "E"], "E": []}),
             ("A", 3, "D", {"A": ["B", "C"], "B": [], "C": []}),
             ("A", 3, "A", {}),
@@ -46,12 +51,14 @@ class GraphTests(unittest.TestCase):
                 self.assertEqual(list(graph), list(expected))
 
     def test_maven_bfs(self):
-        self.config.update({
-            "package_name": "org.example:a",
-            "repository": "https://example.org/maven/",
-            "test_mode": False,
-            "max_depth": 2,
-        })
+        self.config.update(
+            {
+                "package_name": "org.example:a",
+                "repository": "https://example.org/maven/",
+                "test_mode": False,
+                "max_depth": 2,
+            }
+        )
         dependencies = [
             [("org.example", "b", "1.0"), ("org.example", "c", "1.0")],
             [("org.example", "d", "1.0"), ("org.example", "a", "1.0")],
@@ -59,19 +66,24 @@ class GraphTests(unittest.TestCase):
         ]
         with patch("graph.get_dependencies", side_effect=dependencies) as request:
             graph = build_graph(self.config, PROJECT_DIR)
-        self.assertEqual(graph, {
-            "org.example:a:1.0": ["org.example:b:1.0", "org.example:c:1.0"],
-            "org.example:b:1.0": ["org.example:d:1.0", "org.example:a:1.0"],
-            "org.example:c:1.0": ["org.example:d:1.0"],
-            "org.example:d:1.0": [],
-        })
+        self.assertEqual(
+            graph,
+            {
+                "org.example:a:1.0": ["org.example:b:1.0", "org.example:c:1.0"],
+                "org.example:b:1.0": ["org.example:d:1.0", "org.example:a:1.0"],
+                "org.example:c:1.0": ["org.example:d:1.0"],
+                "org.example:d:1.0": [],
+            },
+        )
         self.assertEqual(
             [item.args[0]["package_name"] for item in request.call_args_list],
             ["org.example:a", "org.example:b", "org.example:c"],
         )
         self.config["max_depth"] = 0
         with patch("graph.get_dependencies") as request:
-            self.assertEqual(build_graph(self.config, PROJECT_DIR), {"org.example:a:1.0": []})
+            self.assertEqual(
+                build_graph(self.config, PROJECT_DIR), {"org.example:a:1.0": []}
+            )
             request.assert_not_called()
         self.config["max_depth"] = 2
         with patch("graph.get_dependencies", return_value=[("org.example", "b", "")]):
@@ -106,6 +118,25 @@ class GraphTests(unittest.TestCase):
                 graph = build_graph(self.config, PROJECT_DIR / "tests")
                 with self.assertRaisesRegex(ValueError, "цикл"):
                     get_load_order(graph)
+
+    def test_d2(self):
+        cases = [
+            ({}, ""),
+            ({"A": []}, 'n0: "A"'),
+            ({"A": ["A"]}, 'n0: "A"\nn0 -> n0'),
+            (
+                {"A": ["B"], "B": ["A"]},
+                'n0: "A"\nn1: "B"\nn0 -> n1\nn1 -> n0',
+            ),
+            (
+                {"org.example:a:1.0": ["org.example:b:2.0"], "org.example:b:2.0": []},
+                'n0: "org.example:a:1.0"\nn1: "org.example:b:2.0"\nn0 -> n1',
+            ),
+            ({'a"b': []}, 'n0: "a\\"b"'),
+        ]
+        for graph, expected in cases:
+            with self.subTest(graph=graph):
+                self.assertEqual(to_d2(graph), expected)
 
     def test_invalid_test_repository(self):
         with tempfile.TemporaryDirectory(dir=PROJECT_DIR / "tests") as directory:

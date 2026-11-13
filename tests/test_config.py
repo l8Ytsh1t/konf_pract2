@@ -1,3 +1,5 @@
+# flake8: noqa
+from config import PARAMETERS, load_config
 import subprocess
 import sys
 import tempfile
@@ -9,8 +11,6 @@ import yaml
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_DIR / "src"))
-
-from config import PARAMETERS, load_config
 
 
 class ConfigTests(unittest.TestCase):
@@ -49,7 +49,7 @@ class ConfigTests(unittest.TestCase):
         result = self.run_cli()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stderr, "")
-        self.assertEqual(result.stdout.splitlines(), ["A -> C", "C"])
+        self.assertEqual(result.stdout.splitlines(), ['n0: "A"', 'n1: "C"', "n0 -> n1"])
         result = self.run_cli("--load-order")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.splitlines(), ["C", "A"])
