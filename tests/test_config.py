@@ -19,7 +19,7 @@ class ConfigTests(unittest.TestCase):
         self.addCleanup(self.directory.cleanup)
         self.path = Path(self.directory.name) / "config.yaml"
         self.config = {
-            "package_name": "example",
+            "package_name": "org.example:demo",
             "repository": "https://example.org/packages",
             "test_mode": False,
             "version": "1.0",
@@ -39,27 +39,27 @@ class ConfigTests(unittest.TestCase):
         )
 
     def test_valid_config_and_output(self):
-        self.config["filter_substring"] = "lib"
+        self.config["repository"] = "../repository.pom"
+        self.config["test_mode"] = True
+        self.config["max_depth"] = 0
+        self.config["filter_substring"] = "unused"
         self.write_config()
         self.assertEqual(load_config(self.path), self.config)
         result = self.run_cli()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stderr, "")
         self.assertEqual(result.stdout.splitlines(), [
-            "package_name: example",
-            "repository: https://example.org/packages",
-            "test_mode: false",
-            "version: 1.0",
-            "max_depth: 3",
-            "filter_substring: lib",
+            "org.example:library:2.0",
+            "org.example:tests:1.2",
+            "org.example:inherited-version (версия не указана в POM)",
         ])
 
     def test_invalid_parameter_values(self):
         invalid_values = {
-            "package_name": ["", 12],
+            "package_name": ["", 12, "example", "group:artifact:version"],
             "repository": ["", "example.org", "https://host:bad"],
             "test_mode": ["false", 0],
-            "version": ["", 1.0],
+            "version": ["", 1.0, "../1.0"],
             "max_depth": [-1, 1.5, True],
             "filter_substring": [3],
         }

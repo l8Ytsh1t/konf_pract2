@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 
 from config import load_config
+from maven import get_dependencies
 
 
 def main():
@@ -19,10 +20,18 @@ def main():
     except ValueError as error:
         print(f"Ошибка конфигурации:\n{error}", file=sys.stderr)
         return 1
-    for name, value in config.items():
-        if isinstance(value, bool):
-            value = str(value).lower()
-        print(f"{name}: {value}")
+    try:
+        dependencies = get_dependencies(config, Path(args.config).resolve().parent)
+    except ValueError as error:
+        print(f"Ошибка получения зависимостей: {error}", file=sys.stderr)
+        return 1
+    if not dependencies:
+        print("Прямых зависимостей нет.")
+    for group, artifact, version in dependencies:
+        if version:
+            print(f"{group}:{artifact}:{version}")
+        else:
+            print(f"{group}:{artifact} (версия не указана в POM)")
     return 0
 
 
