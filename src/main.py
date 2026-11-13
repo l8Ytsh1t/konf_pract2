@@ -3,11 +3,11 @@ import sys
 from pathlib import Path
 
 from config import load_config
-from maven import get_dependencies
+from graph import build_graph
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Настройки анализа зависимостей пакета")
+    parser = argparse.ArgumentParser(description="Граф зависимостей пакета")
     parser.add_argument(
         "config",
         nargs="?",
@@ -21,17 +21,17 @@ def main():
         print(f"Ошибка конфигурации:\n{error}", file=sys.stderr)
         return 1
     try:
-        dependencies = get_dependencies(config, Path(args.config).resolve().parent)
+        graph = build_graph(config, Path(args.config).resolve().parent)
     except ValueError as error:
         print(f"Ошибка получения зависимостей: {error}", file=sys.stderr)
         return 1
-    if not dependencies:
-        print("Прямых зависимостей нет.")
-    for group, artifact, version in dependencies:
-        if version:
-            print(f"{group}:{artifact}:{version}")
+    if not graph:
+        print("Граф пуст: исходный пакет исключён фильтром.")
+    for package, dependencies in graph.items():
+        if dependencies:
+            print(f"{package} -> {', '.join(dependencies)}")
         else:
-            print(f"{group}:{artifact} (версия не указана в POM)")
+            print(package)
     return 0
 
 

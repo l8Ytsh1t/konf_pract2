@@ -1,19 +1,10 @@
 import re
-from pathlib import Path
 from urllib.parse import quote
 from urllib.request import urlopen
 from xml.etree import ElementTree
 
 
-def read_pom(config, config_directory):
-    if config["test_mode"]:
-        path = Path(config["repository"])
-        if not path.is_absolute():
-            path = config_directory / path
-        try:
-            return path.read_bytes()
-        except OSError as error:
-            raise ValueError(f"Не удалось прочитать тестовый POM: {error}") from error
+def read_pom(config):
     group, artifact = config["package_name"].split(":")
     version = config["version"]
     parts = group.split(".") + [artifact, version, f"{artifact}-{version}.pom"]
@@ -69,6 +60,6 @@ def parse_dependencies(content, package_name, version):
     return dependencies
 
 
-def get_dependencies(config, config_directory):
-    content = read_pom(config, config_directory)
+def get_dependencies(config):
+    content = read_pom(config)
     return parse_dependencies(content, config["package_name"], config["version"])

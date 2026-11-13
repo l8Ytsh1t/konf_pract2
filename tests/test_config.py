@@ -39,20 +39,17 @@ class ConfigTests(unittest.TestCase):
         )
 
     def test_valid_config_and_output(self):
-        self.config["repository"] = "../repository.pom"
+        self.config["repository"] = "../repository.yaml"
+        self.config["package_name"] = "A"
         self.config["test_mode"] = True
-        self.config["max_depth"] = 0
-        self.config["filter_substring"] = "unused"
+        self.config["max_depth"] = 1
+        self.config["filter_substring"] = "B"
         self.write_config()
         self.assertEqual(load_config(self.path), self.config)
         result = self.run_cli()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stderr, "")
-        self.assertEqual(result.stdout.splitlines(), [
-            "org.example:library:2.0",
-            "org.example:tests:1.2",
-            "org.example:inherited-version (версия не указана в POM)",
-        ])
+        self.assertEqual(result.stdout.splitlines(), ["A -> C", "C"])
 
     def test_invalid_parameter_values(self):
         invalid_values = {
@@ -72,6 +69,12 @@ class ConfigTests(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError, name):
                         load_config(self.path)
             self.config[name] = original
+        self.config["test_mode"] = True
+        self.config["package_name"] = "a"
+        self.config["repository"] = str(PROJECT_DIR / "tests/repository.yaml")
+        self.write_config()
+        with self.assertRaisesRegex(ValueError, "package_name"):
+            load_config(self.path)
 
     def test_missing_parameters(self):
         for name in PARAMETERS:
@@ -86,6 +89,7 @@ class ConfigTests(unittest.TestCase):
         repository = self.path.parent / "repository.txt"
         repository.write_text("", encoding="utf-8")
         self.config["test_mode"] = True
+        self.config["package_name"] = "A"
         for filename in (repository.name, str(repository)):
             with self.subTest(filename=filename):
                 self.config["repository"] = filename
@@ -94,6 +98,7 @@ class ConfigTests(unittest.TestCase):
 
     def test_unavailable_test_repository(self):
         self.config["test_mode"] = True
+        self.config["package_name"] = "A"
         for filename in ("missing.txt", str(self.path.parent)):
             with self.subTest(filename=filename):
                 self.config["repository"] = filename
@@ -119,7 +124,6 @@ class ConfigTests(unittest.TestCase):
         self.assertNotIn("Traceback", result.stderr)
         for name in PARAMETERS:
             self.assertIn(name + ":", result.stderr)
-
 
 
 if __name__ == "__main__":

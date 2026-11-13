@@ -25,7 +25,7 @@ class MavenTests(unittest.TestCase):
             with self.subTest(version=version):
                 config["version"] = version
                 with patch("maven.urlopen", return_value=BytesIO(content)) as request:
-                    dependencies = get_dependencies(config, PROJECT_DIR)
+                    dependencies = get_dependencies(config)
                 request.assert_called_once_with(
                     f"https://example.org/maven/org/example/demo/{version}/demo-{version}.pom",
                     timeout=15,
@@ -55,7 +55,7 @@ class MavenTests(unittest.TestCase):
             with self.subTest(error=error):
                 with patch("maven.urlopen", side_effect=error):
                     with self.assertRaisesRegex(ValueError, "загрузить POM"):
-                        get_dependencies(config, PROJECT_DIR)
+                        get_dependencies(config)
         invalid_documents = (
             b"<project>",
             b"<html/>",
@@ -66,10 +66,7 @@ class MavenTests(unittest.TestCase):
             with self.subTest(content=content):
                 with self.assertRaises(ValueError):
                     parse_dependencies(content, "org.example:demo", "1.0")
-        config["test_mode"] = True
-        config["repository"] = "tests/missing.pom"
-        with self.assertRaisesRegex(ValueError, "тестовый POM"):
-            get_dependencies(config, PROJECT_DIR)
+
 
 
 if __name__ == "__main__":

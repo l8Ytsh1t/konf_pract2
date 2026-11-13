@@ -25,11 +25,14 @@ def validate_config(config, config_directory):
             if not isinstance(value, str) or not value.strip():
                 errors.append(f"{name}: ожидается непустая строка")
     package = config.get("package_name")
-    if isinstance(package, str) and package.strip():  
-        if not re.fullmatch(r"[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*:[A-Za-z0-9_][A-Za-z0-9_.-]*", package):
+    if isinstance(package, str) and package.strip():
+        if config.get("test_mode") is True:
+            if not re.fullmatch(r"[A-Z]+", package):
+                errors.append("package_name: ожидаются большие латинские буквы")
+        elif not re.fullmatch(r"[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*:[A-Za-z0-9_][A-Za-z0-9_.-]*", package):
             errors.append("package_name: ожидается имя Maven-пакета groupId:artifactId")
     version = config.get("version")
-    if isinstance(version, str) and version.strip():  
+    if isinstance(version, str) and version.strip():
         if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.+-]*", version):
             errors.append("version: недопустимый номер версии Maven-пакета")
     if "test_mode" in config and type(config["test_mode"]) is not bool:
