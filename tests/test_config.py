@@ -30,15 +30,15 @@ class ConfigTests(unittest.TestCase):
     def write_config(self):
         self.path.write_text(yaml.safe_dump(self.config), encoding="utf-8")
 
-    def run_cli(self):
+    def run_cli(self, *args):
         return subprocess.run(
-            [str(PROJECT_DIR / "run.sh"), str(self.path)],
+            [str(PROJECT_DIR / "run.sh"), str(self.path), *args],
             capture_output=True,
             text=True,
             cwd=PROJECT_DIR / "tests",
         )
 
-    def test_valid_config_and_output(self):
+    def test_cli_graph_and_load_order(self):
         self.config["repository"] = "../repository.yaml"
         self.config["package_name"] = "A"
         self.config["test_mode"] = True
@@ -50,6 +50,17 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stderr, "")
         self.assertEqual(result.stdout.splitlines(), ["A -> C", "C"])
+        result = self.run_cli("--load-order")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.splitlines(), ["C", "A"])
+        self.config["package_name"] = "G"
+        self.config["filter_substring"] = ""
+        self.write_config()
+        result = self.run_cli("--load-order")
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stdout, "")
+        self.assertIn("цикл", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
 
     def test_invalid_parameter_values(self):
         invalid_values = {

@@ -10,7 +10,7 @@ import yaml
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_DIR / "src"))
 
-from graph import build_graph
+from graph import build_graph, get_load_order
 
 
 class GraphTests(unittest.TestCase):
@@ -77,6 +77,35 @@ class GraphTests(unittest.TestCase):
         with patch("graph.get_dependencies", return_value=[("org.example", "b", "")]):
             with self.assertRaisesRegex(ValueError, "версия"):
                 build_graph(self.config, PROJECT_DIR)
+
+    def test_load_order(self):
+        cases = [
+            ("H", 3, "", ["K", "I", "J", "H"]),
+            ("H", 1, "", ["I", "J", "H"]),
+            ("H", 0, "", ["H"]),
+            ("H", 3, "I", ["K", "J", "H"]),
+            ("H", 3, "H", []),
+            ("F", 3, "", ["F"]),
+        ]
+        for root, depth, substring, expected in cases:
+            with self.subTest(root=root, depth=depth, substring=substring):
+                self.config["package_name"] = root
+                self.config["max_depth"] = depth
+                self.config["filter_substring"] = substring
+                graph = build_graph(self.config, PROJECT_DIR / "tests")
+                order = get_load_order(graph)
+                self.assertEqual(order, expected)
+                for package, dependencies in graph.items():
+                    for dependency in dependencies:
+                        self.assertLess(order.index(dependency), order.index(package))
+
+    def test_load_order_with_cycles(self):
+        for root in ("A", "G"):
+            with self.subTest(root=root):
+                self.config["package_name"] = root
+                graph = build_graph(self.config, PROJECT_DIR / "tests")
+                with self.assertRaisesRegex(ValueError, "цикл"):
+                    get_load_order(graph)
 
     def test_invalid_test_repository(self):
         with tempfile.TemporaryDirectory(dir=PROJECT_DIR / "tests") as directory:

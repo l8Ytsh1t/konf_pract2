@@ -73,3 +73,24 @@ def build_graph(config, config_directory):
                 graph[dependency] = []
                 queue.append((dependency, depth + 1))
     return graph
+
+
+def get_load_order(graph):
+    remaining = {package: len(dependencies) for package, dependencies in graph.items()}
+    dependents = {package: [] for package in graph}
+    for package, dependencies in graph.items():
+        for dependency in dependencies:
+            dependents[dependency].append(package)
+
+    queue = deque(package for package in graph if remaining[package] == 0)
+    order = []
+    while queue:
+        package = queue.popleft()
+        order.append(package)
+        for dependent in dependents[package]:
+            remaining[dependent] -= 1
+            if remaining[dependent] == 0:
+                queue.append(dependent)
+    if len(order) != len(graph):
+        raise ValueError("Граф содержит цикл: порядок загрузки определить невозможно")
+    return order
