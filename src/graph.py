@@ -1,69 +1,72 @@
-"""Модуль для построения графа зависимостей."""
-
+"""Модуль для построения графа зависимостей и его обработки."""
 import json
 import re
 from collections import deque
 from pathlib import Path
 
 import yaml
-
 from maven import get_dependencies
 
-MAVEN_COORDINATES_LENGTH = 3
+MAVEN_COORDS_LEN = 3
 
 
 def load_test_repository(filename):
-    """Загружает и валидирует тестовый репозиторий из YAML."""
+    """Загружает тестовый репозиторий из YAML."""
     try:
         with Path(filename).open(encoding="utf-8") as file:
             repository = yaml.safe_load(file)
     except (OSError, UnicodeError, yaml.YAMLError) as error:
-        raise ValueError(
-            f"Не удалось прочитать тестовый репозиторий: {error}"
-        ) from error
+        raise ValueError(f"Не удалось прочитать тестовый репозиторий: {error}") from error
+
     if not isinstance(repository, dict):
-        raise ValueError(
-            "Тестовый репозиторий должен содержать пары пакет: список зависимостей"
-        )
+        raise ValueError("Тестовый репозиторий должен содержать пары пакет: список")
+
     for name, dependencies in repository.items():
         if not isinstance(name, str) or not re.fullmatch(r"[A-Z]+", name):
-            raise ValueError(
-                "Имена тестовых пакетов должны состоять из больших латинских букв"
-            )
+            raise ValueError("Имена тестовых пакетов должны состоять из больших латинских букв")
         if not isinstance(dependencies, list):
             raise ValueError(f"Зависимости пакета {name} должны быть списком")
-        for dependency in dependencies:
-            if not isinstance(dependency, str) or dependency not in repository:
-                raise ValueError(
-                    f"Неизвестная зависимость {dependency} у пакета {name}"
-                )
+        for dep in dependencies:
+            if not isinstance(dep, str) or dep not in repository:
+                raise ValueError(f"Неизвестная зависимость {dep} у пакета {name}")
     return repository
 
 
-def get_node_dependencies(node, config, test_mode, repository):
-    """Получает прямые зависимости для одного узла графа."""
-    if test_mode:
-        return repository[node]
-
+def _get_maven_dependencies(node, config):
+    """Хелпер для получения зависимостей из Maven."""
     parts = node.split(":")
-    if len(parts) != MAVEN_COORDINATES_LENGTH or not re.fullmatch(
+    if len(parts) != MAVEN_COORDS_LEN or not re.fullmatch(
         r"[A-Za-z0-9_][A-Za-z0-9_.+-]*", parts[2]
     ):
-        raise ValueError(
-            f"Для анализа пакета {node} в POM не указана конкретная версия"
-        )
-
+        raise ValueError(f"Для анализа пакета {node} в POM не указана версия")
+    
     package_config = config.copy()
     package_config["package_name"] = ":".join(parts[:2])
     package_config["version"] = parts[2]
-
+    
     dependencies = []
     for group, artifact, version in get_dependencies(package_config):
-        dependency = f"{group}:{artifact}"
+        dep = f"{group}:{artifact}"
         if version:
-            dependency += ":" + version
-        dependencies.append(dependency)
+            dep += ":" + version
+        dependencies.append(dep)
     return dependencies
+
+
+def _process_dependencies(queue, graph, node, dependencies, depth, config):
+    """Обрабатывает и добавляет зависимости в граф и очередь."""
+    test_mode = config["test_mode"]
+    substring = config["filter_substring"]
+    
+    for dependency in dependencies:
+        name = dependency if test_mode else ":".join(dependency.split(":")[:2])
+        if substring and substring in name:
+            continue
+        if dependency not in graph[node]:
+            graph[node].append(dependency)
+        if dependency not in graph:
+            graph[dependency] = []
+            queue.append((dependency, depth + 1))
 
 
 def build_graph(config, config_directory):
@@ -71,10 +74,10 @@ def build_graph(config, config_directory):
     test_mode = config["test_mode"]
     root = config["package_name"]
     substring = config["filter_substring"]
-
+    
     if substring and substring in root:
         return {}
-
+        
     if test_mode:
         path = Path(config["repository"])
         if not path.is_absolute():
@@ -84,38 +87,37 @@ def build_graph(config, config_directory):
             raise ValueError(f"Пакет {root} отсутствует в тестовом репозитории")
     else:
         root += ":" + config["version"]
-        repository = None
 
     graph = {root: []}
     queue = deque([(root, 0)])
+    
     while queue:
         node, depth = queue.popleft()
         if depth >= config["max_depth"]:
             continue
-
-        dependencies = get_node_dependencies(node, config, test_mode, repository)
-        for dependency in dependencies:
-            name = dependency if test_mode else ":".join(dependency.split(":")[:2])
-            if substring and substring in name:
-                continue
-            if dependency not in graph[node]:
-                graph[node].append(dependency)
-            if dependency not in graph:
-                graph[dependency] = []
-                queue.append((dependency, depth + 1))
+            
+        if test_mode:
+            dependencies = repository[node]
+        else:
+            dependencies = _get_maven_dependencies(node, config)
+            
+        _process_dependencies(queue, graph, node, dependencies, depth, config)
+        
     return graph
 
 
 def get_load_order(graph):
-    """Возвращает порядок загрузки."""
-    remaining = {package: len(dependencies) for package, dependencies in graph.items()}
+    """Возвращает порядок загрузки (топологическая сортировка)."""
+    remaining = {package: len(deps) for package, deps in graph.items()}
     dependents = {package: [] for package in graph}
-    for package, dependencies in graph.items():
-        for dependency in dependencies:
-            dependents[dependency].append(package)
+    
+    for package, deps in graph.items():
+        for dep in deps:
+            dependents[dep].append(package)
 
-    queue = deque(package for package in graph if remaining[package] == 0)
+    queue = deque(pkg for pkg in graph if remaining[pkg] == 0)
     order = []
+    
     while queue:
         package = queue.popleft()
         order.append(package)
@@ -123,13 +125,14 @@ def get_load_order(graph):
             remaining[dependent] -= 1
             if remaining[dependent] == 0:
                 queue.append(dependent)
+                
     if len(order) != len(graph):
         raise ValueError("Граф содержит цикл: порядок загрузки определить невозможно")
     return order
 
 
 def to_d2(graph):
-    """Преобразует граф в формат D2."""
+    """Преобразует граф в текст D2."""
     identifiers = {}
     lines = []
     for index, package in enumerate(graph):
@@ -137,7 +140,8 @@ def to_d2(graph):
         identifiers[package] = identifier
         label = json.dumps(package, ensure_ascii=False)
         lines.append(f"{identifier}: {label}")
-    for package, dependencies in graph.items():
-        for dependency in dependencies:
-            lines.append(f"{identifiers[package]} -> {identifiers[dependency]}")
+        
+    for package, deps in graph.items():
+        for dep in deps:
+            lines.append(f"{identifiers[package]} -> {identifiers[dep]}")
     return "\n".join(lines)

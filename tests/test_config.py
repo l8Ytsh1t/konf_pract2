@@ -1,3 +1,4 @@
+"""Тесты для модуля config: чтение и валидация YAML-конфигурации."""
 # flake8: noqa
 from config import PARAMETERS, load_config
 import subprocess

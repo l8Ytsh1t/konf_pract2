@@ -1,3 +1,4 @@
+"""Тесты для модуля graph: построение графа, фильтрация и циклы."""
 # flake8: noqa
 from graph import build_graph, get_load_order, to_d2
 import sys
