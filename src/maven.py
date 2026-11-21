@@ -5,13 +5,16 @@ from urllib.request import urlopen
 from xml.etree import ElementTree
 
 TIMEOUT_SECONDS = 15
+MISSING_COORD_ERR = "У зависимости в POM отсутствует groupId или artifactId"
 
 
 def read_pom(config):
     """Скачивает POM-файл и возвращает его содержимое."""
     group, artifact = config["package_name"].split(":")
     version = config["version"]
-    parts = group.split(".") + [artifact, version, f"{artifact}-{version}.pom"]
+    parts = group.split(".") + [artifact, version]
+    parts.append(f"{artifact}-{version}.pom")
+    
     address = config["repository"].rstrip("/") + "/"
     address += "/".join(quote(part, safe="") for part in parts)
     
@@ -19,7 +22,9 @@ def read_pom(config):
         with urlopen(address, timeout=TIMEOUT_SECONDS) as response:
             return response.read()
     except (OSError, ValueError) as error:
-        raise ValueError(f"Не удалось загрузить POM {address}: {error}") from error
+        raise ValueError(
+            f"Не удалось загрузить POM {address}: {error}"
+        ) from error
 
 
 def resolve_properties(value, properties):
@@ -41,7 +46,14 @@ def _extract_properties(project, group, artifact, version):
     properties = {}
     for element in project.findall("./properties/*"):
         properties[element.tag] = (element.text or "").strip()
-    for name, val in (("groupId", group), ("artifactId", artifact), ("version", version)):
+        
+    standard_props = (
+        ("groupId", group),
+        ("artifactId", artifact),
+        ("version", version),
+    )
+    
+    for name, val in standard_props:
         properties["project." + name] = val
         properties["pom." + name] = val
     return properties
@@ -53,8 +65,9 @@ def _parse_single_dependency(dependency, properties):
     for name in ("groupId", "artifactId", "version"):
         value = dependency.findtext(name, default="").strip()
         values.append(resolve_properties(value, properties))
+        
     if not values[0] or not values[1]:
-        raise ValueError("У зависимости в POM отсутствует groupId или artifactId")
+        raise ValueError(MISSING_COORD_ERR)
     return tuple(values)
 
 
@@ -63,10 +76,13 @@ def parse_dependencies(content, package_name, version):
     try:
         project = ElementTree.fromstring(content)
     except ElementTree.ParseError as error:
-        raise ValueError(f"Некорректный XML в POM: {error}") from error
+        raise ValueError(
+            f"Некорректный XML в POM: {error}"
+        ) from error
         
     for element in project.iter():
         element.tag = element.tag.split("}")[-1]
+        
     if project.tag != "project":
         raise ValueError("В POM отсутствует корневой элемент project")
 

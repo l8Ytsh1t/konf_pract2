@@ -1,4 +1,5 @@
 """Модуль для чтения и валидации YAML-конфигурации."""
+import re
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -13,32 +14,39 @@ PARAMETERS = (
     "filter_substring",
 )
 
+MAVEN_REGEX = (
+    r"[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*:"
+    r"[A-Za-z0-9_][A-Za-z0-9_.-]*"
+)
+VERSION_REGEX = r"[A-Za-z0-9_][A-Za-z0-9_.+-]*"
+
 
 def validate_package_name(config, errors):
     """Проверяет имя пакета (Maven или тестовый режим)."""
     package = config.get("package_name")
     if not isinstance(package, str) or not package.strip():
         return
+    
     if config.get("test_mode") is True:
-        import re
         if not re.fullmatch(r"[A-Z]+", package):
-            errors.append("package_name: ожидаются большие латинские буквы")
+            errors.append(
+                "package_name: ожидаются большие латинские буквы"
+            )
     else:
-        import re
-        if not re.fullmatch(
-            r"[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*:[A-Za-z0-9_][A-Za-z0-9_.-]*",
-            package,
-        ):
-            errors.append("package_name: ожидается имя Maven-пакета groupId:artifactId")
+        if not re.fullmatch(MAVEN_REGEX, package):
+            errors.append(
+                "package_name: ожидается Maven-пакет groupId:artifactId"
+            )
 
 
 def validate_version(config, errors):
     """Проверяет формат версии."""
     version = config.get("version")
     if isinstance(version, str) and version.strip():
-        import re
-        if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.+-]*", version):
-            errors.append("version: недопустимый номер версии Maven-пакета")
+        if not re.fullmatch(VERSION_REGEX, version):
+            errors.append(
+                "version: недопустимый номер версии Maven-пакета"
+            )
 
 
 def validate_repository(config, config_directory, errors):
@@ -95,7 +103,9 @@ def validate_config(config, config_directory):
     if "max_depth" in config:
         value = config["max_depth"]
         if type(value) is not int or value < 0:
-            errors.append("max_depth: ожидается целое число не меньше нуля")
+            errors.append(
+                "max_depth: ожидается целое число не меньше нуля"
+            )
 
     if "filter_substring" in config:
         if not isinstance(config["filter_substring"], str):
@@ -116,12 +126,16 @@ def load_config(filename):
         with path.open(encoding="utf-8") as file:
             config = yaml.safe_load(file)
     except (OSError, UnicodeError) as error:
-        raise ValueError(f"Не удалось прочитать конфигурацию: {error}") from error
+        raise ValueError(
+            f"Не удалось прочитать конфигурацию: {error}"
+        ) from error
     except yaml.YAMLError as error:
         raise ValueError(f"Ошибка YAML: {error}") from error
     
     if not isinstance(config, dict):
-        raise ValueError("Конфигурация должна содержать параметры в виде ключ-значение")
+        raise ValueError(
+            "Конфигурация должна быть словарем ключ-значение"
+        )
         
     validate_config(config, path.resolve().parent)
     return {name: config[name] for name in PARAMETERS}
