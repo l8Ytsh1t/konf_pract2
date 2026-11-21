@@ -1,4 +1,4 @@
-import re
+"""Модуль для чтения и валидации YAML-конфигурации."""
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -14,57 +14,70 @@ PARAMETERS = (
 )
 
 
-def _check_package_name(config, errors):
+def validate_package_name(config, errors):
+    """Проверяет имя пакета (Maven или тестовый режим)."""
     package = config.get("package_name")
-    if isinstance(package, str) and package.strip():
-        if config.get("test_mode") is True:
-            if not re.fullmatch(r"[A-Z]+", package):
-                errors.append("package_name: ожидаются большие латинские буквы")
-        elif not re.fullmatch(
-            r"[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*:" r"[A-Za-z0-9_][A-Za-z0-9_.-]*",
+    if not isinstance(package, str) or not package.strip():
+        return
+    if config.get("test_mode") is True:
+        import re
+        if not re.fullmatch(r"[A-Z]+", package):
+            errors.append("package_name: ожидаются большие латинские буквы")
+    else:
+        import re
+        if not re.fullmatch(
+            r"[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*:[A-Za-z0-9_][A-Za-z0-9_.-]*",
             package,
         ):
-            errors.append(
-                "package_name: ожидается имя Maven-пакета " "groupId:artifactId"
-            )
+            errors.append("package_name: ожидается имя Maven-пакета groupId:artifactId")
 
 
-def _check_version(config, errors):
+def validate_version(config, errors):
+    """Проверяет формат версии."""
     version = config.get("version")
     if isinstance(version, str) and version.strip():
+        import re
         if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.+-]*", version):
             errors.append("version: недопустимый номер версии Maven-пакета")
 
 
-def _check_repository(config, config_directory, errors):
+def validate_repository(config, config_directory, errors):
+    """Проверяет URL или путь к файлу репозитория."""
     repository = config.get("repository")
     test_mode = config.get("test_mode")
-    if isinstance(repository, str) and repository.strip():
-        if test_mode is True:
-            path = Path(repository)
-            if not path.is_absolute():
-                path = config_directory / path
-            try:
-                with path.open("rb"):
-                    pass
-            except (OSError, ValueError):
-                errors.append("repository: файл тестового репозитория " "недоступен")
-        elif test_mode is False:
-            try:
-                url = urlsplit(repository)
-                valid = (
-                    url.scheme in ("http", "https")
-                    and bool(url.hostname)
-                    and not any(char.isspace() for char in repository)
-                )
-                url.port
-            except ValueError:
-                valid = False
-            if not valid:
-                errors.append("repository: ожидается URL с протоколом http или https")
+    if not (isinstance(repository, str) and repository.strip()):
+        return
+
+    if test_mode is True:
+        path = Path(repository)
+        if not path.is_absolute():
+            path = config_directory / path
+        try:
+            with path.open("rb"):
+                pass
+        except (OSError, ValueError):
+            errors.append(
+                "repository: файл тестового репозитория недоступен"
+            )
+    elif test_mode is False:
+        try:
+            url = urlsplit(repository)
+            valid = (
+                url.scheme in ("http", "https")
+                and bool(url.hostname)
+                and not any(char.isspace() for char in repository)
+            )
+            url.port
+        except ValueError:
+            valid = False
+        if not valid:
+            errors.append(
+                "repository: ожидается URL с протоколом http или https"
+            )
 
 
 def validate_config(config, config_directory):
+    """Главная функция валидации, вызывающая проверки."""
     errors = []
     for name in PARAMETERS:
         if name not in config:
@@ -88,15 +101,16 @@ def validate_config(config, config_directory):
         if not isinstance(config["filter_substring"], str):
             errors.append("filter_substring: ожидается строка")
 
-    _check_package_name(config, errors)
-    _check_version(config, errors)
-    _check_repository(config, config_directory, errors)
+    validate_package_name(config, errors)
+    validate_version(config, errors)
+    validate_repository(config, config_directory, errors)
 
     if errors:
         raise ValueError("\n".join(errors))
 
 
 def load_config(filename):
+    """Загружает YAML-файл и возвращает словарь с настройками."""
     path = Path(filename)
     try:
         with path.open(encoding="utf-8") as file:
@@ -105,11 +119,9 @@ def load_config(filename):
         raise ValueError(f"Не удалось прочитать конфигурацию: {error}") from error
     except yaml.YAMLError as error:
         raise ValueError(f"Ошибка YAML: {error}") from error
-
+    
     if not isinstance(config, dict):
-        raise ValueError(
-            "Конфигурация должна содержать параметры в формате ключ-значение"
-        )
-
+        raise ValueError("Конфигурация должна содержать параметры в виде ключ-значение")
+        
     validate_config(config, path.resolve().parent)
     return {name: config[name] for name in PARAMETERS}
